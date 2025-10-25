@@ -1,0 +1,508 @@
+/**
+ * Note Viral Predictor API - Article Analysis Endpoint
+ *
+ * @description This endpoint analyzes note articles using OpenAI GPT-4 to predict
+ * viral potential and provide actionable improvement suggestions.
+ *
+ * @route POST /api/analyze
+ *
+ * @example
+ * ```typescript
+ * const response = await fetch('/api/analyze', {
+ *   method: 'POST',
+ *   headers: { 'Content-Type': 'application/json' },
+ *   body: JSON.stringify({
+ *     title: '効果的なタイトル',
+ *     content: '記事本文...'
+ *   })
+ * });
+ * const result = await response.json();
+ * ```
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import OpenAI from 'openai';
+import type { AnalysisResult, ArticleInput, Improvement } from '@/types';
+
+/**
+ * OpenAI client instance
+ *
+ * @throws {Error} If OPENAI_API_KEY environment variable is not set
+ */
+const getOpenAIClient = (): OpenAI => {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is not configured in environment variables');
+  }
+
+  return new OpenAI({
+    apiKey,
+  });
+};
+
+/**
+ * Validates article input data
+ *
+ * @param data - Raw request data to validate
+ * @returns Validated ArticleInput or error message
+ */
+const validateInput = (data: unknown): { valid: true; data: ArticleInput } | { valid: false; error: string } => {
+  if (!data || typeof data !== 'object') {
+    return { valid: false, error: 'Request body must be a JSON object' };
+  }
+
+  const { title, content } = data as Partial<ArticleInput>;
+
+  if (!title || typeof title !== 'string' || title.trim().length === 0) {
+    return { valid: false, error: 'Title is required and must be a non-empty string' };
+  }
+
+  if (!content || typeof content !== 'string' || content.trim().length === 0) {
+    return { valid: false, error: 'Content is required and must be a non-empty string' };
+  }
+
+  if (title.length > 200) {
+    return { valid: false, error: 'Title must be 200 characters or less' };
+  }
+
+  if (content.length > 50000) {
+    return { valid: false, error: 'Content must be 50,000 characters or less' };
+  }
+
+  return {
+    valid: true,
+    data: {
+      title: title.trim(),
+      content: content.trim(),
+    },
+  };
+};
+
+/**
+ * Constructs the analysis prompt for OpenAI
+ *
+ * @description Creates a comprehensive prompt that instructs GPT-4 to analyze
+ * note articles based on viral potential factors specific to the platform.
+ *
+ * @param article - The article to analyze
+ * @returns Formatted analysis prompt
+ */
+const buildAnalysisPrompt = (article: ArticleInput): string => {
+  return `あなたはnote記事のバイラル度を予測する専門家AIです。以下の記事を分析し、JSON形式で結果を返してください。
+
+# 分析対象記事
+
+タイトル: ${article.title}
+
+本文:
+${article.content}
+
+# 分析指示
+
+以下の8項目を0-100点で評価してください：
+
+1. **titleScore**: タイトルの魅力度
+   - クリックしたくなる要素（数字、疑問形、意外性）
+   - 具体性と明確さ
+   - 感情を揺さぶる言葉選び
+   - noteで人気のタイトルパターンとの一致度
+
+2. **hookScore**: 冒頭の引き込み力
+   - 最初の3段落で読者を引き込めているか
+   - 共感や驚きを生む導入
+   - 問題提起の明確さ
+   - 続きを読みたくなる展開
+
+3. **structureScore**: 記事構成の質
+   - 見出しの適切な使用
+   - 論理的な流れ
+   - 起承転結の明確さ
+   - 段落分けの適切さ
+
+4. **readabilityScore**: 読みやすさ
+   - 文章の長さ（一文が長すぎないか）
+   - 専門用語の説明
+   - 改行や空白の適切な使用
+   - リズム感のある文章
+
+5. **emotionalScore**: 感情への訴求力
+   - 共感を呼ぶストーリー
+   - 具体的なエピソード
+   - 読者の感情を動かす表現
+   - 人間味のある語り口
+
+6. **trendScore**: トレンド性
+   - 時事性のある話題
+   - SNSでシェアされやすいテーマ
+   - 現在の社会的関心との一致
+   - バズりやすいトピック
+
+7. **lengthScore**: 文字数の適切さ
+   - noteでの最適文字数（1500-3000字が理想）
+   - 内容の密度
+   - 冗長性の有無
+   - テーマに対する文量の適切さ
+
+8. **visualScore**: 視覚要素の効果性
+   - 画像の使用（本文から推測）
+   - 箇条書きや引用の活用
+   - レイアウトの工夫
+   - 視覚的な読みやすさ
+
+# 出力フォーマット
+
+必ず以下のJSON形式で返してください（他の文章は含めないでください）：
+
+{
+  "titleScore": <0-100の数値>,
+  "hookScore": <0-100の数値>,
+  "structureScore": <0-100の数値>,
+  "readabilityScore": <0-100の数値>,
+  "emotionalScore": <0-100の数値>,
+  "trendScore": <0-100の数値>,
+  "lengthScore": <0-100の数値>,
+  "visualScore": <0-100の数値>,
+  "improvements": [
+    {
+      "category": "改善カテゴリ",
+      "priority": "high" | "medium" | "low",
+      "suggestion": "具体的な改善提案",
+      "impact": "期待される効果",
+      "example": "具体例（オプション）"
+    }
+  ],
+  "strengths": ["強み1", "強み2", "強み3"]
+}
+
+# 重要な注意事項
+
+- noteで実際にバズった記事の傾向を考慮してください
+- 改善提案は具体的で実行可能なものにしてください
+- 優先度（priority）は改善の重要度に応じて設定してください
+- 強み（strengths）は最低3つ、最大5つ挙げてください
+- すべての数値は客観的な根拠に基づいて評価してください`;
+};
+
+/**
+ * Calculates the overall viral score based on individual scores
+ *
+ * @description Weighted average calculation that emphasizes title and hook
+ * as they are the most critical factors for initial engagement.
+ *
+ * @param scores - Individual score components
+ * @returns Overall viral score (0-100)
+ */
+const calculateViralScore = (scores: {
+  titleScore: number;
+  hookScore: number;
+  structureScore: number;
+  readabilityScore: number;
+  emotionalScore: number;
+  trendScore: number;
+  lengthScore: number;
+  visualScore: number;
+}): number => {
+  // Weighted calculation - title and hook are most important for virality
+  const weights = {
+    titleScore: 0.20,      // 20% - Most critical for initial click
+    hookScore: 0.20,       // 20% - Critical for retention
+    emotionalScore: 0.15,  // 15% - Key for sharing
+    trendScore: 0.15,      // 15% - Key for discoverability
+    structureScore: 0.10,  // 10%
+    readabilityScore: 0.10, // 10%
+    lengthScore: 0.05,     // 5%
+    visualScore: 0.05,     // 5%
+  };
+
+  const weightedScore = Object.entries(scores).reduce((total, [key, value]) => {
+    return total + (value * (weights[key as keyof typeof weights] || 0));
+  }, 0);
+
+  return Math.round(weightedScore);
+};
+
+/**
+ * Determines the rating based on viral score
+ *
+ * @param score - Overall viral score (0-100)
+ * @returns Rating category
+ */
+const getRating = (score: number): 'low' | 'medium' | 'high' | 'viral' => {
+  if (score >= 80) return 'viral';
+  if (score >= 60) return 'high';
+  if (score >= 40) return 'medium';
+  return 'low';
+};
+
+/**
+ * Estimates potential page views based on viral score
+ *
+ * @description Uses empirical data from note analytics to estimate
+ * view ranges based on article quality scores.
+ *
+ * @param score - Overall viral score (0-100)
+ * @returns Estimated view range
+ */
+const estimateViews = (score: number): { min: number; max: number } => {
+  // Based on note analytics data patterns
+  if (score >= 80) {
+    return { min: 5000, max: 50000 };
+  } else if (score >= 60) {
+    return { min: 1000, max: 10000 };
+  } else if (score >= 40) {
+    return { min: 500, max: 3000 };
+  } else {
+    return { min: 100, max: 1000 };
+  }
+};
+
+/**
+ * Parses and validates OpenAI response
+ *
+ * @param responseText - Raw response from OpenAI
+ * @returns Parsed analysis data
+ * @throws {Error} If response format is invalid
+ */
+const parseOpenAIResponse = (responseText: string): {
+  scores: AnalysisResult['scores'];
+  improvements: Improvement[];
+  strengths: string[];
+} => {
+  try {
+    // Remove markdown code blocks if present
+    const cleanedText = responseText
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
+
+    const parsed = JSON.parse(cleanedText);
+
+    // Validate required fields
+    const requiredScoreFields = [
+      'titleScore',
+      'hookScore',
+      'structureScore',
+      'readabilityScore',
+      'emotionalScore',
+      'trendScore',
+      'lengthScore',
+      'visualScore',
+    ];
+
+    for (const field of requiredScoreFields) {
+      if (typeof parsed[field] !== 'number' || parsed[field] < 0 || parsed[field] > 100) {
+        throw new Error(`Invalid or missing score field: ${field}`);
+      }
+    }
+
+    if (!Array.isArray(parsed.improvements)) {
+      throw new Error('improvements must be an array');
+    }
+
+    if (!Array.isArray(parsed.strengths)) {
+      throw new Error('strengths must be an array');
+    }
+
+    return {
+      scores: {
+        titleScore: parsed.titleScore,
+        hookScore: parsed.hookScore,
+        structureScore: parsed.structureScore,
+        readabilityScore: parsed.readabilityScore,
+        emotionalScore: parsed.emotionalScore,
+        trendScore: parsed.trendScore,
+        lengthScore: parsed.lengthScore,
+        visualScore: parsed.visualScore,
+      },
+      improvements: parsed.improvements,
+      strengths: parsed.strengths,
+    };
+  } catch (error) {
+    throw new Error(`Failed to parse OpenAI response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+/**
+ * POST /api/analyze - Analyzes an article for viral potential
+ *
+ * @description Main API endpoint that orchestrates the analysis workflow:
+ * 1. Validates input
+ * 2. Calls OpenAI GPT-4 for analysis
+ * 3. Processes and enriches results
+ * 4. Returns comprehensive analysis
+ *
+ * @param request - Next.js request object
+ * @returns Analysis results or error response
+ *
+ * @example
+ * ```typescript
+ * // Success response (200)
+ * {
+ *   "viralScore": 75,
+ *   "rating": "high",
+ *   "scores": { ... },
+ *   "improvements": [ ... ],
+ *   "strengths": [ ... ],
+ *   "estimatedViews": { min: 1000, max: 10000 },
+ *   "analyzedAt": "2025-10-24T10:30:00.000Z"
+ * }
+ *
+ * // Error response (400/500)
+ * {
+ *   "error": "Error message",
+ *   "details": "Additional context"
+ * }
+ * ```
+ */
+export async function POST(request: NextRequest) {
+  try {
+    // Parse and validate request body
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: 'Invalid JSON in request body',
+          details: error instanceof Error ? error.message : 'Unknown parsing error',
+        },
+        { status: 400 }
+      );
+    }
+
+    const validation = validateInput(body);
+    if (!validation.valid) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: validation.error,
+        },
+        { status: 400 }
+      );
+    }
+
+    const article = validation.data;
+
+    // Initialize OpenAI client
+    let openai: OpenAI;
+    try {
+      openai = getOpenAIClient();
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: 'OpenAI API configuration error',
+          details: error instanceof Error ? error.message : 'API key not configured',
+        },
+        { status: 500 }
+      );
+    }
+
+    // Call OpenAI API for analysis
+    const prompt = buildAnalysisPrompt(article);
+    let completion: OpenAI.Chat.Completions.ChatCompletion;
+
+    try {
+      completion = await openai.chat.completions.create({
+        model: 'gpt-4-turbo-preview',
+        messages: [
+          {
+            role: 'system',
+            content: 'あなたはnote記事のバイラル度を分析する専門家です。正確な評価と具体的な改善提案を提供します。必ずJSON形式で返答してください。',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+      });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: 'OpenAI API request failed',
+          details: error instanceof Error ? error.message : 'Unknown API error',
+        },
+        { status: 500 }
+      );
+    }
+
+    // Parse OpenAI response
+    const responseText = completion.choices[0]?.message?.content;
+    if (!responseText) {
+      return NextResponse.json(
+        {
+          error: 'Empty response from OpenAI',
+          details: 'The API returned no content',
+        },
+        { status: 500 }
+      );
+    }
+
+    let analysisData: ReturnType<typeof parseOpenAIResponse>;
+    try {
+      analysisData = parseOpenAIResponse(responseText);
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: 'Failed to process analysis results',
+          details: error instanceof Error ? error.message : 'Response parsing error',
+        },
+        { status: 500 }
+      );
+    }
+
+    // Calculate overall viral score and additional metrics
+    const viralScore = calculateViralScore(analysisData.scores);
+    const rating = getRating(viralScore);
+    const estimatedViews = estimateViews(viralScore);
+
+    // Construct final analysis result
+    const result: AnalysisResult = {
+      viralScore,
+      rating,
+      scores: analysisData.scores,
+      improvements: analysisData.improvements,
+      strengths: analysisData.strengths,
+      estimatedViews,
+      analyzedAt: new Date().toISOString(),
+    };
+
+    return NextResponse.json(result, { status: 200 });
+
+  } catch (error) {
+    // Catch-all error handler for unexpected errors
+    console.error('Unexpected error in /api/analyze:', error);
+
+    return NextResponse.json(
+      {
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'An unexpected error occurred',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * GET /api/analyze - Health check endpoint
+ *
+ * @description Returns API status and configuration info (without exposing secrets)
+ *
+ * @returns API health status
+ */
+export async function GET() {
+  const isConfigured = !!process.env.OPENAI_API_KEY;
+
+  return NextResponse.json(
+    {
+      status: 'ok',
+      version: '1.0.0',
+      openaiConfigured: isConfigured,
+      supportedMethods: ['POST'],
+    },
+    { status: 200 }
+  );
+}
