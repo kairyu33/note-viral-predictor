@@ -14,11 +14,11 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Main Cards */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* API Documentation Card */}
+        {/* Main Card */}
+        <div className="mb-8">
+          {/* Analysis Card */}
           <Link href="/example" className="block">
-            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-xl transition-shadow cursor-pointer h-full">
+            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-xl transition-shadow cursor-pointer">
               <div className="text-4xl mb-4">🚀</div>
               <h2 className="text-2xl font-bold text-gray-900 mb-3">
                 記事を分析
@@ -28,22 +28,6 @@ export default function Home() {
               </p>
               <div className="flex items-center text-blue-600 font-medium">
                 分析を開始 →
-              </div>
-            </div>
-          </Link>
-
-          {/* Usage Dashboard Card */}
-          <Link href="/usage" className="block">
-            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-xl transition-shadow cursor-pointer h-full">
-              <div className="text-4xl mb-4">📊</div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                API使用状況
-              </h2>
-              <p className="text-gray-600 mb-4">
-                API使用量、トークン消費、コストをリアルタイムで確認できます。
-              </p>
-              <div className="flex items-center text-blue-600 font-medium">
-                ダッシュボードを見る →
               </div>
             </div>
           </Link>
@@ -72,26 +56,32 @@ export default function Home() {
               </p>
             </div>
             <div>
-              <h4 className="font-semibold text-gray-900 mb-2">💰 コスト管理</h4>
+              <h4 className="font-semibold text-gray-900 mb-2">⚡ レート制限</h4>
               <p className="text-gray-600 text-sm">
-                API使用状況とコストを詳細に追跡・可視化
+                1時間に10回までの分析が可能（不正使用を防止）
               </p>
             </div>
           </div>
         </div>
 
-        {/* API Info */}
+        {/* Tech Stack */}
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-blue-900 mb-3">🔧 APIエンドポイント</h3>
+          <h3 className="text-lg font-bold text-blue-900 mb-3">🔧 技術スタック</h3>
           <div className="space-y-2 text-sm text-blue-800">
-            <div className="font-mono bg-blue-100 p-2 rounded">
-              <strong>POST</strong> /api/analyze - 記事を分析
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">AI Model:</span>
+              <span>Claude Sonnet 4.5 (Anthropic)</span>
             </div>
-            <div className="font-mono bg-blue-100 p-2 rounded">
-              <strong>GET</strong> /api/usage - 使用状況を取得
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">Framework:</span>
+              <span>Next.js 16.0 + TypeScript</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">機能:</span>
+              <span>プロンプトキャッシング（90%コスト削減）</span>
             </div>
             <p className="text-xs text-blue-600 mt-3">
-              詳細なAPI仕様は <Link href="/example" className="underline">記事分析ページ</Link> をご確認ください
+              <Link href="/example" className="underline">記事分析を開始する →</Link>
             </p>
           </div>
         </div>

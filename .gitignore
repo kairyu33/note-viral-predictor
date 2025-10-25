@@ -46,3 +46,6 @@ next-env.d.ts
 
 # usage data
 /data
+
+# admin urls (local only)
+.admin-urls.local
