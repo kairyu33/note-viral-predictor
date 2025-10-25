@@ -209,7 +209,12 @@ const analyzeWithClaude = async (article: ArticleInput): Promise<AnalysisResult>
     const cacheReadTokens = (response.usage as any).cache_read_input_tokens || 0;
 
     // Send usage data to tracking endpoint (fire and forget)
-    fetch('http://localhost:3000/api/usage', {
+    // Use relative URL to work in any environment (localhost, Vercel, etc.)
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+    fetch(`${baseUrl}/api/usage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

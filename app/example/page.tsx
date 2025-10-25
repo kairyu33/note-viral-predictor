@@ -73,14 +73,9 @@ export default function ExamplePage() {
                   note バイラル度予測AI
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  デモページ - コンポーネント使用例
+                  AI分析で記事のバイラル度を予測
                 </p>
               </div>
-            </div>
-            <div className="px-4 py-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-              <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">
-                サンプルデータ使用中
-              </span>
             </div>
           </div>
         </div>
